@@ -33,25 +33,25 @@ Instead of a standard CRUD application, this project utilizes a **multi-agent LL
    git clone [https://github.com/yourusername/agrisense.git](https://github.com/yourusername/agrisense.git)
    cd agrisense
 
- 2.Install dependencies:
+ 2. **Install dependencies:**
 
   Bash
    pip install fastapi uvicorn google-generativeai
 
- 3.Set your API Key:
+ 3. **Set your API Key:**
   Ensure you have your Google Gemini API key configured in your environment variables.
   Bash
    export GEMINI_API_KEY="your_api_key_here"
  
- 4.Run the server:
+ 4. **Run the server:**
 
   Bash
    uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
    
 Open the Dashboard: Navigate to http://127.0.0.1:8000/agents in your browser.
 
-🧠 Architecture Notes
-This project deliberately bypasses standard multi-page HTML routing in favor of a Single-File Micro-Frontend. The entire application is mounted to a single <div id="app">, allowing the custom JavaScript state engine to render isolated agent tools without ever reloading the browser, mimicking the feel of a native desktop application.
+🧠 **Architecture Notes**
+   This project deliberately bypasses standard multi-page HTML routing in favor of a Single-File Micro-Frontend. The entire application is mounted to a single <div id="app">, allowing the custom JavaScript state engine to render isolated agent tools without ever reloading the browser, mimicking the feel of a native desktop application.
 
 Add this section to the bottom of your README.mdl
 
