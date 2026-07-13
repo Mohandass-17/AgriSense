@@ -51,7 +51,8 @@ Instead of a standard CRUD application, this project utilizes a **multi-agent LL
 Open the Dashboard: Navigate to http://127.0.0.1:8000/agents in your browser.
 
 🧠 **Architecture Notes**
-   This project deliberately bypasses standard multi-page HTML routing in favor of a Single-File Micro-Frontend. The entire application is mounted to a single <div id="app">, allowing the custom JavaScript state engine to render isolated agent tools without ever reloading the browser, mimicking the feel of a native desktop application.
+
+   This project deliberately bypasses standard multi-page HTML routing in favor of a Single-File Micro-Frontend. The entire application is mounted to a single, allowing the custom JavaScript state engine to render isolated agent tools without ever reloading the browser, mimicking the feel of a native desktop application.
 
 Add this section to the bottom of your README.mdl
 
