@@ -1,25 +1,3 @@
-"""
-import requests
-import sys
-import codecs
-
-# PERFECT FIX: Handle Windows Emoji encoding
-if sys.platform.startswith('win'):
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
-
-def run_demo():
-    print("🌾 AGRI-AGENT SYSTEM DEMO 🌾")
-    payload = {"temperature": 22, "humidity": 75, "crop_type": "wheat"}
-    try:
-        r = requests.post("http://localhost:8000/disease/predict", json=payload)
-        print(f"Response: {r.json()}")
-    except Exception as e:
-        print(f"Server offline? Error: {e}")
-
-if __name__ == "__main__":
-    run_demo()
-"""
-
 import requests
 import sys
 import codecs
