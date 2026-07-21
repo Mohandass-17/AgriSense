@@ -59,3 +59,6 @@ Add this section to the bottom of your README.mdl
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+<img width="1912" height="930" alt="Screenshot 2026-07-21 145942" src="https://github.com/user-attachments/assets/f1874f05-81ed-4879-80f6-5bd2ecebb583" />
