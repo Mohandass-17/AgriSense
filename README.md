@@ -19,6 +19,7 @@ Instead of a standard CRUD application, this project utilizes a **multi-agent LL
 <img width="1919" height="941" alt="Screenshot 2026-07-21 150628" src="https://github.com/user-attachments/assets/ad884465-67af-4d38-9b40-f609e9f7e608" />
 
   * 🐛 **Pest Radar:** Cross-references land type, weather mood, and crop type to assess immediate pest risks.
+    
   * 📈 **Yield Forecaster:** Projects base yield vs. potential yield based on applied agronomic recommendations.
 
 <img width="1919" height="944" alt="Screenshot 2026-07-21 150605" src="https://github.com/user-attachments/assets/6e31145e-26fd-4a6c-9204-8baffcf82c44" />
