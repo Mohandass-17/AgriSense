@@ -9,6 +9,7 @@ Instead of a standard CRUD application, this project utilizes a **multi-agent LL
 <img width="1912" height="930" alt="Screenshot 2026-07-21 145942" src="https://github.com/user-attachments/assets/f1874f05-81ed-4879-80f6-5bd2ecebb583" />
 
 * **Multi-Agent Logic Engine:** Specialized micro-agents process data for specific domains:
+  
   * 💧 **Irrigation Agent:** Calculates plant available water (PAW) and generates precise watering durations.
 
 <img width="1919" height="942" alt="Screenshot 2026-07-21 150659" src="https://github.com/user-attachments/assets/2ae92447-1b86-4ca6-b5ec-e19c1b58d224" />
