@@ -80,27 +80,20 @@ Follow these steps to run the AgriSense OS locally on your machine.
 git clone [https://github.com/Mohandass-17/AgriSense.git](https://github.com/Mohandass-17/AgriSense.git)
 cd AgriSense
 
-**2. Create a virtual environment**
-
+2. Create a virtual environment
 python -m venv .venv
 # On Windows: .\.venv\Scripts\activate
 # On macOS/Linux: source .venv/bin/activate
 
-**3. Install dependencies**
-
-Bash
+3. Install dependencies
 pip install -r requirements.txt
 
-**4. Set your API Key**
+4. Set your API Key
 Copy the provided template file to create your local environment variables:
-
-Bash
 cp .env.example .env
 Open the .env file and replace your_api_key_here with your actual Google Gemini API key.
 
-**5. Run the server**
-
-Bash
+5. Run the server
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 Open the Dashboard: Navigate to http://127.0.0.1:8000/ui/agents in your browser.
 
