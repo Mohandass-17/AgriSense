@@ -76,15 +76,17 @@ Implements Command Query Responsibility Segregation (CQRS) to separate the read-
 Follow these steps to run the AgriSense OS locally on your machine.
 
 **1. Clone the repository**
-bash
+
+Bash
 git clone [https://github.com/Mohandass-17/AgriSense.git](https://github.com/Mohandass-17/AgriSense.git)
 cd AgriSense
 
 **2. Create a virtual environment**
+
 Bash
 python -m venv .venv
-# On Windows: .\.venv\Scripts\activate
-# On macOS/Linux: source .venv/bin/activate
+ On Windows: .\.venv\Scripts\activate
+ On macOS/Linux: source .venv/bin/activate
 
 **3. Install dependencies**
 
