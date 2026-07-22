@@ -6,6 +6,8 @@ Instead of a standard CRUD application, this project utilizes a **multi-agent LL
 
 ## ✨ Key Features
 
+<img width="1912" height="930" alt="Screenshot 2026-07-21 145942" src="https://github.com/user-attachments/assets/f1874f05-81ed-4879-80f6-5bd2ecebb583" />
+
 * **Multi-Agent Logic Engine:** Specialized micro-agents process data for specific domains:
   * 💧 **Irrigation Agent:** Calculates plant available water (PAW) and generates precise watering durations.
   * 🦠 **Disease & Vision Agent:** Analyzes canopy temperature, VPD (Vapor Pressure Deficit), and user-uploaded plant imagery to diagnose fungal and bacterial threats.
@@ -61,4 +63,3 @@ Add this section to the bottom of your README.mdl
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 
-<img width="1912" height="930" alt="Screenshot 2026-07-21 145942" src="https://github.com/user-attachments/assets/f1874f05-81ed-4879-80f6-5bd2ecebb583" />
