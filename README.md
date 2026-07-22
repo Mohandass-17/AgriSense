@@ -10,10 +10,22 @@ Instead of a standard CRUD application, this project utilizes a **multi-agent LL
 
 * **Multi-Agent Logic Engine:** Specialized micro-agents process data for specific domains:
   * 💧 **Irrigation Agent:** Calculates plant available water (PAW) and generates precise watering durations.
+
+<img width="1919" height="942" alt="Screenshot 2026-07-21 150659" src="https://github.com/user-attachments/assets/2ae92447-1b86-4ca6-b5ec-e19c1b58d224" />
+
   * 🦠 **Disease & Vision Agent:** Analyzes canopy temperature, VPD (Vapor Pressure Deficit), and user-uploaded plant imagery to diagnose fungal and bacterial threats.
+
+<img width="1919" height="941" alt="Screenshot 2026-07-21 150628" src="https://github.com/user-attachments/assets/ad884465-67af-4d38-9b40-f609e9f7e608" />
+
   * 🐛 **Pest Radar:** Cross-references land type, weather mood, and crop type to assess immediate pest risks.
   * 📈 **Yield Forecaster:** Projects base yield vs. potential yield based on applied agronomic recommendations.
+
+<img width="1919" height="944" alt="Screenshot 2026-07-21 150605" src="https://github.com/user-attachments/assets/6e31145e-26fd-4a6c-9204-8baffcf82c44" />
+
 * **Live Story Composer:** A background synthesis engine that translates raw sensor arrays across the entire node fleet into a readable, real-time farm narrative.
+
+<img width="1919" height="946" alt="Screenshot 2026-07-21 145907" src="https://github.com/user-attachments/assets/f718edfe-3220-4a0c-b07b-f170578d7892" />
+
 * **Command Query Responsibility Segregation (CQRS) Pattern:** Separates the read-only global telemetry dashboard from the isolated agent command centers, ensuring a snappy, non-blocking user experience.
 
 ## 🛠️ Tech Stack
