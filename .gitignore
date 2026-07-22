@@ -1,0 +1,14 @@
+# Environment & Secret files
+.env
+.venv/
+
+# Python compiled bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing caches & IDE files
+.pytest_cache/
+.vscode/
+.idea/
+.DS_Store
