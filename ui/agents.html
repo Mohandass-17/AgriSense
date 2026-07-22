@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AgriSense Pro OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body { -webkit-tap-highlight-color: transparent; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased overflow-hidden">
+    
+    <div id="app" class="flex h-screen w-full"></div>
+
+    <script>
+        // --- 1. CRASH DETECTOR ---
+        window.onerror = function(message, source, lineno) {
+            document.getElementById('app').innerHTML = `
+                <div class="flex items-center justify-center h-full w-full bg-slate-50 p-6">
+                    <div class="bg-white p-8 rounded-2xl shadow-xl border-l-4 border-red-500 max-w-lg w-full">
+                        <h2 class="text-2xl font-black text-red-600 mb-2">System Crash</h2>
+                        <div class="bg-slate-900 text-red-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                            <strong>Error:</strong> ${message}<br><strong>Line:</strong> ${lineno}
+                        </div>
+                    </div>
+                </div>`;
+            return true;
+        };
+
+        const API_BASE = ""; 
+
+        // --- 2. CENTRAL STATE STORE ---
+        const Store = {
+            state: {
+                activeTab: 'overview',
+                syncStatus: 'System Online',
+                overviewMode: 'recent',
+                activeDeviceId: 'field-001',
+                
+                entities: {
+                    'field-001': { crop: 'wheat', moisture: 38, temp: 26, humidity: 65, soil_type: 'loam', area_hectares: 1.0, health_status: 'Optimal', updated: new Date().toLocaleTimeString() },
+                    'field-002': { crop: 'corn', moisture: 22, temp: 28, humidity: 55, soil_type: 'sand', area_hectares: 2.5, health_status: 'Needs Water', updated: new Date().toLocaleTimeString() }
+                },
+                
+                agentResults: {
+                    irrigation: null, health: null, pest: null, yield: null
+                },
+
+                chatHistory: [{ role: 'ai', text: 'AgriSense OS online. I am synced with all device nodes. How can I assist?' }],
+                isProcessing: false,
+                storyLines: ["Awaiting agent synchronization..."]
+            },
+            listeners: [],
+            getState() { return this.state; },
+            setState(newState) { this.state = { ...this.state, ...newState }; this.notify(); },
+            
+            updateEntity(deviceId, newMetrics) {
+                if (!this.state.entities[deviceId]) {
+                    this.state.entities[deviceId] = { health_status: 'Pending Analysis', updated: new Date().toLocaleTimeString() };
+                }
+                this.state.entities[deviceId] = { ...this.state.entities[deviceId], ...newMetrics, updated: new Date().toLocaleTimeString() };
+                this.state.activeDeviceId = deviceId; 
+                this.notify();
+            },
+
+            setAgentResult(agentKey, resultData) {
+                this.state.agentResults[agentKey] = resultData;
+                this.notify();
+            },
+
+            subscribe(listener) { this.listeners.push(listener); },
+            notify() { this.listeners.forEach(listener => listener(this.state)); }
+        };
+        window.Store = Store;
+
+        // --- 3. API GATEWAY ---
+        class APIService {
+            static async post(endpoint, payload) {
+                Store.setState({ isProcessing: true, syncStatus: 'Processing Agent...' });
+                try {
+                    const res = await fetch(`${API_BASE}${endpoint}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    Store.setState({ syncStatus: 'System Online' });
+                    return await res.json();
+                } catch (error) {
+                    Store.setState({ syncStatus: 'Connection Error' });
+                    throw error;
+                } finally {
+                    Store.setState({ isProcessing: false });
+                }
+            }
+        }
+
+        // --- 4. THE STORY INTEGRATOR ---
+        async function syncFarmStory() {
+            try {
+                const activeData = Store.state.entities[Store.state.activeDeviceId] || {};
+                const payload = {
+                    crop_type: activeData.crop, temperature: activeData.temp, humidity: activeData.humidity,
+                    moisture: activeData.moisture, area_hectares: activeData.area_hectares,
+                    leaf_spots: activeData.leaf_spots, land_health: activeData.land_health,
+                    weather_keywords: activeData.weather_keywords, weather_mood: activeData.weather_mood
+                };
+                const data = await APIService.post("/insight/story", payload);
+                if (data.story_lines) Store.setState({ storyLines: data.story_lines });
+            } catch (e) {
+                console.warn("Story sync failed:", e);
+            }
+        }
+
+        // --- IMAGE PREVIEW HANDLER ---
+        window.previewImage = function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const dropzone = document.getElementById('disease-dropzone');
+                    dropzone.innerHTML = `
+                        <img src="${e.target.result}" class="h-32 w-full object-cover rounded-lg border-2 border-purple-500 shadow-sm" alt="Plant preview">
+                        <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-lg cursor-pointer">
+                            <span class="text-white font-bold"><i class="fa-solid fa-camera mr-2"></i>Change Photo</span>
+                        </div>
+                    `;
+                }
+                reader.readAsDataURL(file);
+            }
+        };
+
+        // --- 5. UI COMPONENTS ---
+        const UI = {
+            Sidebar: (state) => {
+                const tabs = [
+                    { id: 'overview', icon: 'fa-table-cells-large', label: 'Fleet Overview' },
+                    { id: 'irrigation', icon: 'fa-droplet', label: 'Irrigation Agent' },
+                    { id: 'health', icon: 'fa-viruses', label: 'Health & Pests' },
+                    { id: 'yield', icon: 'fa-chart-line', label: 'Yield Agent' },
+                    { id: 'ai', icon: 'fa-robot', label: 'AI Copilot' }
+                ];
+                
+                const navItems = tabs.map(tab => `
+                    <button onclick="Store.setState({activeTab: '${tab.id}'})" 
+                            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${state.activeTab === tab.id ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}">
+                        <i class="fa-solid ${tab.icon} w-5 text-center"></i>
+                        <span class="hidden md:block">${tab.label}</span>
+                    </button>
+                `).join('');
+
+                return `
+                    <aside class="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-full p-4 z-20 shadow-sm">
+                        <div class="flex items-center gap-2 mb-8 px-2 text-slate-800">
+                            <i class="fa-solid fa-layer-group text-2xl"></i>
+                            <h1 class="text-xl font-black tracking-tight">AgriSense<span class="font-light">OS</span></h1>
+                        </div>
+                        <nav class="flex-1 flex flex-col gap-2 overflow-y-auto">${navItems}</nav>
+                        <div class="mt-auto px-2 py-4 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold ${state.syncStatus.includes('Error') ? 'text-red-500' : 'text-slate-400'}">
+                            <div class="w-2 h-2 rounded-full ${state.syncStatus.includes('Error') ? 'bg-red-500' : (state.isProcessing ? 'bg-amber-400 animate-ping' : 'bg-emerald-500')}"></div>
+                            ${state.syncStatus}
+                        </div>
+                    </aside>
+                    <nav class="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 flex justify-around pb-6 pt-2 px-2 z-50">
+                        ${tabs.map(tab => `
+                            <button onclick="Store.setState({activeTab: '${tab.id}'})" class="flex flex-col items-center gap-1 p-2 w-16 transition-colors ${state.activeTab === tab.id ? 'text-emerald-600' : 'text-slate-400'}">
+                                <i class="fa-solid ${tab.icon} text-lg mb-1 ${state.activeTab === tab.id ? 'transform scale-110 transition-transform' : ''}"></i>
+                                <span class="text-[9px] font-bold uppercase tracking-wider truncate w-full text-center">${tab.label.split(' ')[0]}</span>
+                            </button>
+                        `).join('')}
+                    </nav>
+                `;
+            },
+
+            OverviewTab: (state) => {
+                const activeData = state.entities[state.activeDeviceId] || {};
+                const storyHtml = state.storyLines.map(line => `<div class="bg-white border-l-4 border-emerald-500 p-4 rounded shadow-sm text-sm text-slate-700 mb-2">${line}</div>`).join('');
+                
+                const MetricBlock = (label, value, unit = '') => `
+                    <div class="flex flex-col justify-center p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">${label}</span>
+                        <span class="text-lg font-black text-slate-700 leading-none">${value || '--'} <span class="text-sm text-slate-400 font-normal">${unit}</span></span>
+                    </div>
+                `;
+
+                if (state.overviewMode === 'all') {
+                    const rows = Object.entries(state.entities).map(([id, data]) => `
+                        <tr class="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onclick="Store.setState({activeDeviceId: '${id}', overviewMode: 'recent'})">
+                            <td class="py-4 px-4 font-bold text-slate-700">${id}</td>
+                            <td class="py-4 px-4 uppercase text-xs font-bold text-slate-500">${data.crop || 'Unknown'}</td>
+                            <td class="py-4 px-4"><span class="font-bold">${data.moisture || '--'}%</span></td>
+                            <td class="py-4 px-4"><span class="font-bold">${data.temp || '--'}°C</span></td>
+                            <td class="py-4 px-4 font-semibold ${data.health_status === 'Optimal' ? 'text-emerald-500' : (data.health_status === 'Action Required' ? 'text-red-500' : 'text-amber-500')}">${data.health_status}</td>
+                            <td class="py-4 px-4 text-xs text-slate-400">${data.updated}</td>
+                        </tr>
+                    `).join('');
+
+                    return `
+                        <div class="max-w-6xl mx-auto animate-[fadeIn_0.3s_ease-out]">
+                            <header class="mb-6 flex justify-between items-end">
+                                <div><h2 class="text-2xl font-bold text-slate-800">Fleet Overview</h2></div>
+                                <div class="bg-slate-200 p-1 rounded-lg flex text-sm font-bold">
+                                    <button onclick="Store.setState({overviewMode: 'recent'})" class="px-4 py-1 rounded text-slate-500 hover:text-slate-700">Recent Node</button>
+                                    <button class="px-4 py-1 rounded bg-white shadow-sm text-slate-800">All Nodes</button>
+                                </div>
+                            </header>
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                <table class="w-full text-left">
+                                    <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
+                                        <tr><th class="py-3 px-4">Device ID</th><th class="py-3 px-4">Crop</th><th class="py-3 px-4">Moisture</th><th class="py-3 px-4">Temp</th><th class="py-3 px-4">Status</th><th class="py-3 px-4">Last Sync</th></tr>
+                                    </thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="max-w-5xl mx-auto animate-[fadeIn_0.3s_ease-out]">
+                        <header class="mb-6 flex justify-between items-end">
+                            <div>
+                                <h2 class="text-2xl font-bold text-slate-800">Node Overview: <span class="text-emerald-600">${state.activeDeviceId}</span></h2>
+                                <p class="text-sm text-slate-500 mt-1">Latest synchronized telemetry. Last updated: ${activeData.updated}</p>
+                            </div>
+                            <div class="bg-slate-200 p-1 rounded-lg flex text-sm font-bold">
+                                <button class="px-4 py-1 rounded bg-white shadow-sm text-slate-800">Recent Node</button>
+                                <button onclick="Store.setState({overviewMode: 'all'})" class="px-4 py-1 rounded text-slate-500 hover:text-slate-700">All Nodes</button>
+                            </div>
+                        </header>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                            ${MetricBlock('Crop Type', activeData.crop)}
+                            ${MetricBlock('Soil Moisture', activeData.moisture, '%')}
+                            ${MetricBlock('Canopy Temp', activeData.temp, '°C')}
+                            <div class="flex flex-col justify-center p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
+                                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">System Status</span>
+                                <span class="text-lg font-black ${activeData.health_status === 'Optimal' ? 'text-emerald-600' : (activeData.health_status === 'Action Required' ? 'text-red-600' : 'text-amber-500')}">${activeData.health_status}</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-100 p-6 rounded-2xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bolt text-emerald-600 mr-2"></i> AI Insight Synthesis</h3>
+                                <button onclick="syncFarmStory()" ${state.isProcessing ? 'disabled' : ''} class="text-xs bg-white text-slate-600 border border-slate-200 px-3 py-1 rounded hover:bg-slate-50 font-bold disabled:opacity-50 transition-colors"><i class="fa-solid fa-rotate mr-1"></i> Force Sync</button>
+                            </div>
+                            <div class="space-y-2">${storyHtml}</div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            IrrigationTab: (state) => {
+                const activeData = state.entities[state.activeDeviceId] || {};
+                const res = state.agentResults.irrigation;
+                
+                const resultHtml = res ? `
+                    <div class="mt-6 p-5 bg-blue-50 border border-blue-200 rounded-xl animate-[fadeIn_0.3s_ease-out]">
+                        <h3 class="text-blue-900 font-bold mb-3 uppercase text-xs tracking-wider border-b border-blue-200 pb-2">Agent Results</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><span class="text-xs text-blue-600 block">Action</span><span class="font-bold text-blue-900">${res.action.toUpperCase()}</span></div>
+                            <div><span class="text-xs text-blue-600 block">Available Water</span><span class="font-bold text-blue-900">${res.plant_available_water_pct}%</span></div>
+                            <div><span class="text-xs text-blue-600 block">Duration</span><span class="font-bold text-blue-900">${res.recommended_duration_minutes} mins</span></div>
+                            <div><span class="text-xs text-blue-600 block">Confidence</span><span class="font-bold text-blue-900">${res.confidence}</span></div>
+                        </div>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="max-w-2xl mx-auto animate-[fadeIn_0.3s_ease-out]">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="bg-blue-50 px-6 py-4 border-b border-blue-100"><h2 class="font-bold text-blue-900"><i class="fa-solid fa-droplet mr-2"></i> Irrigation Command Center</h2></div>
+                            <div class="p-6">
+                                <form onsubmit="handleAgentSubmit(event, '/irrigation/assess', 'irrigation')" class="space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Device ID</label><input type="text" name="device_id" value="${state.activeDeviceId}" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:bg-white" required></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Crop Type</label><input type="text" name="crop_type" value="${activeData.crop || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Soil Moisture (%)</label><input type="number" name="moisture" value="${activeData.moisture || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Soil Type</label>
+                                            <select name="soil_type" class="w-full px-3 py-2 border rounded-lg bg-slate-50">
+                                                <option value="loam" ${activeData.soil_type === 'loam' ? 'selected' : ''}>Loam</option>
+                                                <option value="sand" ${activeData.soil_type === 'sand' ? 'selected' : ''}>Sand</option>
+                                                <option value="clay" ${activeData.soil_type === 'clay' ? 'selected' : ''}>Clay</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" ${state.isProcessing ? 'disabled' : ''} class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg mt-4 disabled:opacity-50 transition-colors">Run Analysis</button>
+                                </form>
+                                ${resultHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            HealthTab: (state) => {
+                const activeData = state.entities[state.activeDeviceId] || {};
+                const resHealth = state.agentResults.health;
+                const resPest = state.agentResults.pest;
+                
+                const healthHtml = resHealth ? `
+                    <div class="mt-6 p-5 ${resHealth.status === 'disease_detected' ? 'bg-red-50 border-red-200 text-red-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'} border rounded-xl animate-[fadeIn_0.3s_ease-out]">
+                        <h3 class="font-bold mb-3 uppercase text-xs tracking-wider border-b pb-2">Diagnostic Results</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><span class="text-xs block opacity-70">Status</span><span class="font-bold">${resHealth.status.toUpperCase()}</span></div>
+                            <div><span class="text-xs block opacity-70">Disease Detected</span><span class="font-bold">${resHealth.disease || 'None'}</span></div>
+                            <div class="col-span-2"><span class="text-xs block opacity-70">VPD</span><span class="font-bold">${resHealth.vpd_kpa} kPa</span></div>
+                        </div>
+                    </div>
+                ` : '';
+
+                const pestHtml = resPest ? `
+                    <div class="mt-6 p-5 ${resPest.pests && resPest.pests.length > 0 ? 'bg-orange-50 border-orange-200 text-orange-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'} border rounded-xl animate-[fadeIn_0.3s_ease-out]">
+                        <h3 class="font-bold mb-3 uppercase text-xs tracking-wider border-b pb-2">Pest Threat Radar</h3>
+                        <div class="grid grid-cols-1 gap-4">
+                            ${resPest.pests && resPest.pests.length > 0 ? resPest.pests.map(p => `
+                                <div>
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-bold text-orange-900">${p.name.toUpperCase()}</span>
+                                        <span class="text-xs font-bold bg-orange-200 px-2 py-1 rounded">Risk: ${p.risk_severity || p.confidence}%</span>
+                                    </div>
+                                    <span class="text-sm block opacity-80">${p.advice}</span>
+                                </div>
+                            `).join('') : `<div><span class="font-bold">Clear</span><span class="text-sm block opacity-80">${resPest.summary || 'No immediate threats.'}</span></div>`}
+                        </div>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="max-w-4xl mx-auto space-y-6 animate-[fadeIn_0.3s_ease-out]">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div class="bg-purple-50 px-6 py-4 border-b border-purple-100 flex justify-between items-center">
+                                    <h2 class="font-bold text-purple-900"><i class="fa-solid fa-viruses mr-2"></i> Disease Control</h2>
+                                    <span class="text-[10px] bg-purple-200 text-purple-800 px-2 py-1 rounded font-bold uppercase tracking-wider">Vision AI Enabled</span>
+                                </div>
+                                <div class="p-6">
+                                    <form onsubmit="handleAgentSubmit(event, '/disease/predict', 'health')" class="space-y-4">
+                                        
+                                        <div class="mb-4">
+                                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Plant Image Analysis (Optional)</label>
+                                            <div class="relative group">
+                                                <label for="disease-upload" id="disease-dropzone" class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-purple-500 transition-all overflow-hidden">
+                                                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                                        <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 mb-2 group-hover:text-purple-500 transition-colors"></i>
+                                                        <p class="mb-1 text-sm text-slate-500"><span class="font-bold text-purple-600">Tap to snap</span> or drag and drop</p>
+                                                    </div>
+                                                </label>
+                                                <input id="disease-upload" name="plant_image" type="file" class="hidden" accept="image/*" onchange="previewImage(event)" />
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Device ID</label><input type="text" name="device_id" value="${state.activeDeviceId}" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:bg-white" required></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Crop</label><input type="text" name="crop_type" value="${activeData.crop || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Spots (%)</label><input type="number" name="leaf_spots" value="${activeData.leaf_spots || '0'}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Temp (°C)</label><input type="number" name="temperature" value="${activeData.temp || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Humidity (%)</label><input type="number" name="humidity" value="${activeData.humidity || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                        </div>
+                                        <button type="submit" ${state.isProcessing ? 'disabled' : ''} class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg mt-4 disabled:opacity-50 transition-colors"><i class="fa-solid fa-microscope mr-2"></i> Run Fungal Scan</button>
+                                    </form>
+                                    ${healthHtml}
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div class="bg-orange-50 px-6 py-4 border-b border-orange-100"><h2 class="font-bold text-orange-900"><i class="fa-solid fa-bug mr-2"></i> Pest Radar</h2></div>
+                                <div class="p-6">
+                                    <form onsubmit="handleAgentSubmit(event, '/pest/recommend', 'pest')" class="space-y-4">
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Device ID</label><input type="text" name="device_id" value="${state.activeDeviceId}" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:bg-white" required></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Crop</label><input type="text" name="crop_type" value="${activeData.crop || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Land</label><input type="text" name="land_type" value="${activeData.land_type || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Temp (°C)</label><input type="number" name="temperature" value="${activeData.temp || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Humidity (%)</label><input type="number" name="humidity" value="${activeData.humidity || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                        </div>
+                                        <button type="submit" ${state.isProcessing ? 'disabled' : ''} class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-lg mt-4 disabled:opacity-50 transition-colors">Run Pest Scan</button>
+                                    </form>
+                                    ${pestHtml}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            YieldTab: (state) => {
+                const activeData = state.entities[state.activeDeviceId] || {};
+                const res = state.agentResults.yield;
+                
+                const resultHtml = res ? `
+                    <div class="mt-6 p-5 bg-emerald-50 border border-emerald-200 rounded-xl animate-[fadeIn_0.3s_ease-out]">
+                        <h3 class="text-emerald-900 font-bold mb-3 uppercase text-xs tracking-wider border-b border-emerald-200 pb-2">Projection Results</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><span class="text-xs text-emerald-700 block">Limiting Factor</span><span class="font-bold text-emerald-900">${res.limiting_stress_factor || 'None'}</span></div>
+                            <div><span class="text-xs text-emerald-700 block">Base Yield</span><span class="font-bold text-emerald-900">${res.without_recommendations_tonnes} t</span></div>
+                            <div><span class="text-xs text-emerald-700 block">Potential Yield</span><span class="font-bold text-emerald-900">${res.with_recommendations_tonnes} t</span></div>
+                            <div><span class="text-xs text-emerald-700 block">Yield Gap</span><span class="font-bold text-emerald-900">${res.yield_gap_tonnes} t</span></div>
+                        </div>
+                    </div>
+                ` : '';
+
+                const recs = Array.isArray(activeData.recommendations) ? activeData.recommendations : [];
+
+                return `
+                    <div class="max-w-2xl mx-auto animate-[fadeIn_0.3s_ease-out]">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="bg-emerald-50 px-6 py-4 border-b border-emerald-100"><h2 class="font-bold text-emerald-900"><i class="fa-solid fa-chart-line mr-2"></i> Yield Command Center</h2></div>
+                            <div class="p-6">
+                                <form onsubmit="handleAgentSubmit(event, '/yield/project', 'yield')" class="space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Device ID</label><input type="text" name="device_id" value="${state.activeDeviceId}" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:bg-white" required></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Crop Type</label><input type="text" name="crop_type" value="${activeData.crop || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Area (ha)</label><input type="number" step="0.1" name="area_hectares" value="${activeData.area_hectares || '1.0'}" class="w-full px-3 py-2 border rounded-lg bg-slate-50" required></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Humidity (%)</label><input type="number" name="humidity" value="${activeData.humidity || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Temp (°C)</label><input type="number" name="temperature" value="${activeData.temp || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Land Health</label><input type="text" name="land_health" value="${activeData.land_health || ''}" class="w-full px-3 py-2 border rounded-lg bg-slate-50"></div>
+                                        <div class="col-span-2">
+                                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Recommendations Applied (Ctrl/Cmd to select multiple)</label>
+                                            <select name="recommendations" multiple class="w-full px-3 py-2 border rounded-lg bg-slate-50 h-24">
+                                                <option value="balanced_nutrition" ${recs.includes('balanced_nutrition') ? 'selected' : ''}>Balanced nutrition</option>
+                                                <option value="irrigation_upgrade" ${recs.includes('irrigation_upgrade') ? 'selected' : ''}>Irrigation upgrade</option>
+                                                <option value="pest_control" ${recs.includes('pest_control') ? 'selected' : ''}>Pest control</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" ${state.isProcessing ? 'disabled' : ''} class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg mt-4 disabled:opacity-50 transition-colors">Run Yield Projection</button>
+                                </form>
+                                ${resultHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            AssistantTab: (state) => {
+                const historyHtml = state.chatHistory.map(msg => `
+                    <div class="flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-4">
+                        <div class="max-w-[85%] rounded-2xl px-5 py-3 shadow-sm ${msg.role === 'user' ? 'bg-slate-800 text-white rounded-br-sm' : 'bg-white border text-slate-800 rounded-bl-sm'}">
+                            <p class="text-[15px]">${msg.text}</p>
+                        </div>
+                    </div>
+                `).join('');
+
+                return `
+                    <div class="max-w-3xl mx-auto h-[calc(100vh-140px)] md:h-[calc(100vh-64px)] flex flex-col animate-[fadeIn_0.3s_ease-out]">
+                        <div class="flex-1 bg-slate-50 rounded-2xl border flex flex-col shadow-sm">
+                            <div class="bg-white px-6 py-4 border-b flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-700"><i class="fa-solid fa-robot"></i></div>
+                                <div><h2 class="text-sm font-bold">AgriSense Copilot</h2><p class="text-xs text-slate-400">Context Linked: ${state.activeDeviceId}</p></div>
+                            </div>
+                            <div id="chat-scroll" class="flex-1 overflow-y-auto p-6">${historyHtml}
+                                ${state.isProcessing ? `<div class="text-slate-400 text-sm"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Analyzing...</div>` : ''}
+                            </div>
+                            <div class="bg-white p-4 border-t">
+                                <form onsubmit="handleChatSubmit(event)" class="flex gap-2">
+                                    <input type="text" id="chat-input" placeholder="Query system..." class="flex-1 px-4 py-3 bg-slate-50 border rounded-xl outline-none" required>
+                                    <button type="submit" ${state.isProcessing ? 'disabled' : ''} class="bg-slate-800 text-white w-14 rounded-xl flex items-center justify-center disabled:opacity-50"><i class="fa-solid fa-paper-plane"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        };
+
+        // --- 6. GLOBAL EVENT HANDLERS ---
+        window.handleAgentSubmit = async (e, endpoint, agentKey) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const payload = {};
+            
+            // Safely extract data, filtering out raw File objects for JSON transmission
+            for (let key of formData.keys()) {
+                if (key === 'recommendations') {
+                    payload[key] = formData.getAll(key);
+                } else {
+                    let val = formData.get(key);
+                    if (val instanceof File) {
+                        // For this frontend simulation, we tell the backend an image was uploaded
+                        payload[key] = val.name ? "image_uploaded" : null; 
+                    } else {
+                        payload[key] = (val === "" || isNaN(Number(val))) ? val : Number(val);
+                    }
+                }
+            }
+
+            const deviceId = payload.device_id || 'unknown-device';
+            
+            Store.updateEntity(deviceId, {
+                crop: payload.crop_type || undefined,
+                moisture: payload.moisture || undefined,
+                temp: payload.temperature || undefined,
+                humidity: payload.humidity || undefined,
+                area_hectares: payload.area_hectares || undefined,
+                recommendations: payload.recommendations || undefined
+            });
+
+            Store.setAgentResult(agentKey, null);
+
+            try {
+                const data = await APIService.post(endpoint, payload);
+                Store.setAgentResult(agentKey, data);
+
+                let newStatus = 'Optimal';
+                if (data.action === 'irrigate' || data.status === 'disease_detected' || (data.pests && data.pests.length > 0)) {
+                    newStatus = 'Action Required';
+                } else if (data.action === 'reduce_watering') {
+                    newStatus = 'Waterlogged';
+                }
+                Store.updateEntity(deviceId, { health_status: newStatus });
+                
+                syncFarmStory();
+
+            } catch (err) {
+                alert("Agent simulation failed. Check backend connection.");
+            }
+        };
+
+        window.handleChatSubmit = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const newHistory = [...Store.getState().chatHistory, { role: 'user', text }];
+            Store.setState({ chatHistory: newHistory });
+
+            try {
+                const activeData = Store.state.entities[Store.state.activeDeviceId] || {};
+                const payload = { question: text, session_id: "pro-app", device_id: Store.state.activeDeviceId, ...activeData };
+                const res = await APIService.post("/llm/chat", payload);
+                Store.setState({ chatHistory: [...newHistory, { role: 'ai', text: res.reply }] });
+            } catch (err) {
+                Store.setState({ chatHistory: [...newHistory, { role: 'ai', text: "Service Unavailable. Ensure backend is running." }] });
+            }
+        };
+
+        // --- 7. RENDER ENGINE ---
+        function render(state) {
+            const app = document.getElementById('app');
+            if (!app) return; 
+            
+            let content = '';
+            if (state.activeTab === 'overview') content = UI.OverviewTab(state);
+            else if (state.activeTab === 'irrigation') content = UI.IrrigationTab(state);
+            else if (state.activeTab === 'health') content = UI.HealthTab(state);
+            else if (state.activeTab === 'yield') content = UI.YieldTab(state);
+            else if (state.activeTab === 'ai') content = UI.AssistantTab(state);
+
+            app.innerHTML = `
+                ${UI.Sidebar(state)}
+                <main class="flex-1 h-full overflow-y-auto bg-slate-50 p-4 md:p-8 pb-24 md:pb-8">${content}</main>
+            `;
+
+            if (state.activeTab === 'ai') {
+                const chatBox = document.getElementById('chat-scroll');
+                if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        Store.subscribe(render);
+        render(Store.getState());
+        syncFarmStory();
+    </script>
+</body>
+</html>
